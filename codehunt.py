@@ -11,7 +11,7 @@ import os
 import sys
 from urllib.parse import urlparse
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # JSON schema used by the Claude path (structured outputs) and described in the
 # Gemini prompt (which can't combine grounding with response_schema reliably).
