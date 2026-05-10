@@ -119,18 +119,16 @@ def patch_manifest() -> bool:
     changed = False
 
     if "android.permission.INTERNET" not in text:
-        # Inject the uses-permission element immediately after the opening
-        # <manifest> tag so it sits at the manifest root, not inside <application>.
-        new_text = re.sub(
-            r"(<manifest[^>]*>)",
-            r"\1\n    <uses-permission android:name=\"android.permission.INTERNET\" />",
-            text,
-            count=1,
-        )
-        if new_text == text:
+        # Splice the permission in immediately after the opening <manifest> tag
+        # so it sits at the manifest root, not inside <application>. Using a
+        # raw-string regex replacement here mangles escapes — splice manually.
+        match = re.search(r"<manifest[^>]*>", text)
+        if not match:
             print("error: could not find <manifest> opening tag", file=sys.stderr)
             return False
-        text = new_text
+        end = match.end()
+        permission = '<uses-permission android:name="android.permission.INTERNET" />'
+        text = text[:end] + "\n    " + permission + text[end:]
         changed = True
         print("manifest: added INTERNET permission")
     else:
