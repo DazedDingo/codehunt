@@ -19,8 +19,10 @@ For each code, assess confidence it actually works *right now*:
 
 Important rules:
 - Do NOT invent plausible-looking codes. Only return codes you actually observed on a source.
+- Discard any code whose only sources are low-quality aggregator catalogs like **Coupert, PromoPro, CouponBirds, CouponXoo, or DontPayFull** — these sites generate plausible-looking codes that rarely work. Only include a code from these sources if a separate reputable source (RetailMeNot, Honey, Slickdeals, Reddit, the merchant's own social media) independently confirms it.
 - If no real codes exist, return an empty list and explain in the summary. Many boutique merchants genuinely don't run public promos — an honest "none found" is the right answer.
 - Don't include codes that are clearly account-gated, region-locked, or first-purchase-only unless you flag the restriction in notes.
+- For the source field, return a fully-qualified URL (https://...) whenever you can.
 
 Return your answer as a single JSON object with this exact shape:
 

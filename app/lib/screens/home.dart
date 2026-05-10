@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../gemini.dart';
 import '../share_receiver.dart';
 import '../storage.dart';
 import 'settings_screen.dart';
+
+enum ConfidenceFilter { high, medium, all }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +19,18 @@ class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
   Future<HuntResult>? _pending;
   List<String> _history = [];
+  ConfidenceFilter _filter = ConfidenceFilter.medium;
+
+  bool _passesFilter(CouponCode c) {
+    switch (_filter) {
+      case ConfidenceFilter.high:
+        return c.confidence == 'high';
+      case ConfidenceFilter.medium:
+        return c.confidence == 'high' || c.confidence == 'medium';
+      case ConfidenceFilter.all:
+        return true;
+    }
+  }
 
   @override
   void initState() {
@@ -142,6 +157,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _resultsList(List<CouponCode> allCodes, List<CouponCode> filtered) {
+    if (allCodes.isEmpty) {
+      return const Center(child: Text('No codes found.'));
+    }
+    if (filtered.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No codes pass the "${_filter.name}" filter. '
+            'Try "all" to see ${allCodes.length} lower-confidence result${allCodes.length == 1 ? '' : 's'}.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      itemCount: filtered.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) => _CodeTile(code: filtered[i]),
+    );
+  }
+
   Widget _resultsView() {
     final pending = _pending;
     if (pending == null) {
@@ -167,7 +206,8 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         final r = snap.data!;
-        final codes = [...r.codes]..sort((a, b) => a.rank.compareTo(b.rank));
+        final allCodes = [...r.codes]..sort((a, b) => a.rank.compareTo(b.rank));
+        final filtered = allCodes.where(_passesFilter).toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -195,15 +235,27 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 4),
             Text(r.summary, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
+            if (allCodes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: SegmentedButton<ConfidenceFilter>(
+                  segments: const [
+                    ButtonSegment(value: ConfidenceFilter.high, label: Text('high')),
+                    ButtonSegment(value: ConfidenceFilter.medium, label: Text('medium+')),
+                    ButtonSegment(value: ConfidenceFilter.all, label: Text('all')),
+                  ],
+                  selected: {_filter},
+                  onSelectionChanged: (s) => setState(() => _filter = s.first),
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
             Expanded(
-              child: codes.isEmpty
-                  ? const Center(child: Text('No codes found.'))
-                  : ListView.separated(
-                      itemCount: codes.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) => _CodeTile(code: codes[i]),
-                    ),
+              child: _resultsList(allCodes, filtered),
             ),
           ],
         );
@@ -255,6 +307,20 @@ class _CodeTile extends StatelessWidget {
     }
   }
 
+  /// Returns a launchable URI if the source looks like one, else null.
+  Uri? _sourceUri() {
+    final s = code.source.trim();
+    if (s.isEmpty) return null;
+    if (s.startsWith('http://') || s.startsWith('https://')) {
+      return Uri.tryParse(s);
+    }
+    // Bare domain like "retailmenot.com" — prepend scheme.
+    if (s.contains('.') && !s.contains(' ')) {
+      return Uri.tryParse('https://$s');
+    }
+    return null;
+  }
+
   void _copy(BuildContext context) {
     Clipboard.setData(ClipboardData(text: code.code));
     ScaffoldMessenger.of(context)
@@ -268,9 +334,22 @@ class _CodeTile extends StatelessWidget {
       );
   }
 
+  Future<void> _openSource(BuildContext context) async {
+    final uri = _sourceUri();
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Couldn't open ${uri.host}")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _confidenceColor();
+    final sourceLaunchable = _sourceUri() != null;
+    final sourceText = '${code.confidence} · ${code.source}';
     return ListTile(
       onTap: () => _copy(context),
       leading: CircleAvatar(
@@ -288,10 +367,20 @@ class _CodeTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(code.discount),
-          Text(
-            '${code.confidence} · ${code.source}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (sourceLaunchable)
+            GestureDetector(
+              onTap: () => _openSource(context),
+              child: Text(
+                sourceText,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.blue,
+                    ),
+              ),
+            )
+          else
+            Text(sourceText, style: Theme.of(context).textTheme.bodySmall),
           if (code.notes.isNotEmpty)
             Text(
               code.notes,

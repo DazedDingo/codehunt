@@ -4,6 +4,33 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.5.0 — 2026-05-10
+
+Three more quality-of-life features in one release. Results are now both
+*better* (junk filtered out) and *more verifiable* (tap a source to see
+where it came from).
+
+- **Junk-aggregator blocklist baked into the prompt.** Coupert, PromoPro,
+  CouponBirds, CouponXoo, and DontPayFull are known to fabricate
+  plausible-looking codes; the prompt now tells the model to discard codes
+  sourced *only* from those sites unless a reputable source (RetailMeNot,
+  Honey, Slickdeals, Reddit, the merchant directly) independently confirms.
+  Applies to both the app and the CLI.
+- **Tappable sources.** The `confidence · source` line under each code is
+  now a link when the source looks like a URL or bare domain — taps open
+  in your default browser. The prompt also now asks for fully-qualified
+  URLs as sources whenever possible.
+- **Confidence filter.** A segmented control above the results lets you
+  pick `high` / `medium+` / `all`. Default is `medium+` so low-confidence
+  noise is hidden by default; switch to `all` to see everything.
+- **Empty-filter explainer.** If the filter hides every code, the screen
+  tells you how many are filtered out and which option would reveal them.
+
+### Migration from v0.4.0
+
+In-place update — same signing key, same storage format. History and
+cache carry forward.
+
 ## v0.4.0 — 2026-05-10
 
 Three quality-of-life features in one release.
