@@ -25,12 +25,9 @@ can paste yourself.
 
 | Surface  | Best for                                     | Where it lives                |
 | -------- | -------------------------------------------- | ----------------------------- |
-| Android  | Phone checkout. Paste or type a URL.         | [`app/`](app)                 |
+| Android  | Phone checkout. Share URL from Chrome.       | [`app/`](app)                 |
 | CLI      | Scripts, automation, quick desktop lookups.  | [`codehunt.py`](codehunt.py)  |
 | Backend  | What the app talks to. Self-host, one box.   | [`backend/`](backend)         |
-
-> **Coming in v0.2.1:** "Share to codehunt" from Chrome's share sheet — see
-> the deferred-features note in [CHANGELOG.md](CHANGELOG.md).
 
 All three call the same `hunt_gemini` / `hunt_claude` functions, so behavior
 is identical regardless of how you invoke them.
@@ -42,7 +39,9 @@ is identical regardless of how you invoke them.
 2. Grab the APK from the [latest release](../../releases/latest) and sideload
    it (Settings → Apps → Allow from this source).
 3. Open the app, tap the gear icon, paste your backend URL and token. Save.
-4. Type or paste a URL on the home screen and tap **Hunt**.
+4. From now on, when you're on a checkout page in Chrome: tap the URL bar's
+   Share button, pick **codehunt**, and the hunt starts automatically. You
+   can also type a URL on the home screen directly.
 
 The app's Settings screen shows the installed version (and the DazedDingo
 signature, in case you forget what you're running).

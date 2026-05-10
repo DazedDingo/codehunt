@@ -1,13 +1,67 @@
 #!/usr/bin/env python3
 """Patch Flutter-generated Android scaffolding for codehunt.
 
-Currently injects only the SEND intent filter into AndroidManifest.xml so that
-Chrome's share sheet shows codehunt as a target. Run from the app/ directory
-after `flutter create . --platforms=android`. Idempotent.
+Applies, idempotently:
+  1. SEND intent filter to AndroidManifest.xml — so Chrome's share sheet
+     offers codehunt as a target for shared URLs.
+  2. MainActivity.kt — replaces the bare `class MainActivity: FlutterActivity()`
+     with one that reads ACTION_SEND payloads (cold launch + hot share) and
+     forwards them to Dart over a `codehunt.share` method channel.
+
+Run from the app/ directory after `flutter create . --platforms=android`.
 """
 
 import sys
 from pathlib import Path
+
+MAIN_ACTIVITY_TEMPLATE = """%PACKAGE%
+
+import android.content.Intent
+import android.os.Bundle
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity : FlutterActivity() {
+    private val channelName = "codehunt.share"
+    private var sharedText: String? = null
+    private var channel: MethodChannel? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+        sharedText?.let {
+            channel?.invokeMethod("shareReceived", it)
+            sharedText = null
+        }
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        channel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getInitialShare" -> {
+                    result.success(sharedText)
+                    sharedText = null
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        }
+    }
+}
+"""
 
 
 def patch_manifest() -> bool:
@@ -34,5 +88,28 @@ def patch_manifest() -> bool:
     return True
 
 
+def patch_main_activity() -> bool:
+    candidates = list(Path("android/app/src/main/kotlin").rglob("MainActivity.kt"))
+    if not candidates:
+        print("error: MainActivity.kt not found under android/app/src/main/kotlin", file=sys.stderr)
+        return False
+    activity = candidates[0]
+    text = activity.read_text()
+
+    if "codehunt.share" in text:
+        print(f"MainActivity: share handling already present at {activity} — skipping")
+        return True
+
+    package_line = next((line for line in text.splitlines() if line.startswith("package ")), None)
+    if not package_line:
+        print(f"error: no package line in {activity}", file=sys.stderr)
+        return False
+
+    activity.write_text(MAIN_ACTIVITY_TEMPLATE.replace("%PACKAGE%", package_line))
+    print(f"MainActivity: patched share handling at {activity}")
+    return True
+
+
 if __name__ == "__main__":
-    sys.exit(0 if patch_manifest() else 1)
+    ok = patch_manifest() and patch_main_activity()
+    sys.exit(0 if ok else 1)

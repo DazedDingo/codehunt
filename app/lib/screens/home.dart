@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../settings.dart';
+import '../share_receiver.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -25,6 +26,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final s = await Settings.load();
     if (!mounted) return;
     setState(() => _settings = s);
+
+    // Cold-launch share: pull whatever the native side queued during onCreate.
+    final initial = await ShareReceiver.getInitialShare();
+    if (initial != null && initial.isNotEmpty) {
+      _onShared(initial);
+    }
+    // Hot-share: register for shares delivered while the app is running.
+    ShareReceiver.setHandler(_onShared);
+  }
+
+  void _onShared(String text) {
+    _controller.text = text.trim();
+    _runHunt();
   }
 
   void _runHunt() {

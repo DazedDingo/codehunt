@@ -4,6 +4,26 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.2.1 — 2026-05-10
+
+The share-intent release.
+
+- **Share-to-codehunt works.** When you're on a checkout page in Chrome, tap
+  the share button and pick codehunt — the URL pre-fills on the home screen
+  and the hunt runs automatically. Same flow whether the app is cold-launched
+  by the share or already running in the background.
+- **Implementation: native MainActivity + method channel.** The Kotlin side
+  reads `ACTION_SEND` payloads in `onCreate` and `onNewIntent` and pushes the
+  URL to Dart over a `codehunt.share` method channel. No third-party plugin
+  — bypasses the JVM target / AGP namespace gradle pain that blocked
+  `receive_sharing_intent` in v0.2.0. `scripts/patch_android.py` injects the
+  MainActivity body after `flutter create` scaffolds it.
+
+### Migration from v0.2.0
+
+Nothing to do beyond installing the new APK. Backend and settings are
+unchanged.
+
 ## v0.2.0 — 2026-05-10
 
 The mobile release.
