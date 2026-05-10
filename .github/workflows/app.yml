@@ -26,6 +26,13 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Pinned: newer stable Flutter ships Kotlin Gradle 2.x which hard-fails
+          # the receive_sharing_intent build on a JVM target mismatch we can't
+          # patch around (the android.compileOptions extension is finalized
+          # before any subprojects/allprojects hook can fire). 3.24.5 ships
+          # Kotlin 1.x which only warns. Revisit when receive_sharing_intent
+          # publishes a JVM-17-clean build.
+          flutter-version: 3.24.5
           channel: stable
           cache: true
 
