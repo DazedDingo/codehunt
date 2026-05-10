@@ -32,8 +32,8 @@ jobs:
       - name: Scaffold platform code
         run: flutter create . --project-name codehunt --org com.dazeddingo --platforms=android
 
-      - name: Patch AndroidManifest for share intent
-        run: python3 ../scripts/patch_manifest.py
+      - name: Patch AndroidManifest + gradle config
+        run: python3 ../scripts/patch_android.py
 
       - name: Get dependencies
         run: flutter pub get
