@@ -1,0 +1,3 @@
+google-genai>=0.7.0
+# Optional — only needed for `--provider claude`:
+# anthropic>=0.92.0
