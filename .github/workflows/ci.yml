@@ -28,7 +28,7 @@ jobs:
           pip install ruff
 
       - name: Lint
-        run: ruff check codehunt.py tests/ backend/ scripts/
+        run: ruff check codehunt.py tests/ scripts/
 
       - name: Test
         run: python -m unittest discover -s tests -v

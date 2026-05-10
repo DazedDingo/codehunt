@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../api.dart';
-import '../settings.dart';
+import '../gemini.dart';
 import '../share_receiver.dart';
 import 'settings_screen.dart';
 
@@ -13,7 +12,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
-  Settings? _settings;
   Future<HuntResult>? _pending;
 
   @override
@@ -23,16 +21,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final s = await Settings.load();
-    if (!mounted) return;
-    setState(() => _settings = s);
-
-    // Cold-launch share: pull whatever the native side queued during onCreate.
     final initial = await ShareReceiver.getInitialShare();
     if (initial != null && initial.isNotEmpty) {
       _onShared(initial);
     }
-    // Hot-share: register for shares delivered while the app is running.
     ShareReceiver.setHandler(_onShared);
   }
 
@@ -42,32 +34,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _runHunt() {
-    final s = _settings;
-    if (s == null) return;
-    if (!s.configured) {
-      _openSettings();
-      return;
-    }
     final target = _controller.text.trim();
     if (target.isEmpty) return;
     setState(() {
-      _pending = CodehuntClient(baseUrl: s.baseUrl, token: s.token)
-          .hunt(target, provider: s.provider);
+      _pending = hunt(target);
     });
   }
 
-  Future<void> _openSettings() async {
-    final s = _settings;
-    if (s == null) return;
+  Future<void> _openAbout() async {
     await Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(settings: s),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
-    final reloaded = await Settings.load();
-    if (!mounted) return;
-    setState(() => _settings = reloaded);
   }
 
   @override
@@ -78,16 +56,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_settings == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('codehunt'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openSettings,
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'About',
+            onPressed: _openAbout,
           ),
         ],
       ),

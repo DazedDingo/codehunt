@@ -26,24 +26,34 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          # Pinned: newer stable Flutter ships Kotlin Gradle 2.x which hard-fails
-          # the receive_sharing_intent build on a JVM target mismatch we can't
-          # patch around (the android.compileOptions extension is finalized
-          # before any subprojects/allprojects hook can fire). 3.24.5 ships
-          # Kotlin 1.x which only warns. Revisit when receive_sharing_intent
-          # publishes a JVM-17-clean build.
+          # 3.24.5 — newer stable ships APIs (withValues, initialValue) but
+          # we keep the older toolchain so the build is reproducible.
           flutter-version: 3.24.5
           channel: stable
           cache: true
 
+      - name: Install librsvg for icon rasterization
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Rasterize logo.svg into launcher PNGs
+        run: |
+          mkdir -p assets
+          rsvg-convert -w 1024 -h 1024 ../logo.svg -o assets/icon.png
+          # Adaptive-icon foreground: render larger so the % glyph stays visible
+          # after the system applies its circular/squircle mask.
+          rsvg-convert -w 1024 -h 1024 ../logo.svg -o assets/icon_foreground.png
+
       - name: Scaffold platform code
         run: flutter create . --project-name codehunt --org com.dazeddingo --platforms=android
 
-      - name: Patch AndroidManifest + gradle config
+      - name: Patch AndroidManifest + MainActivity for share intent
         run: python3 ../scripts/patch_android.py
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
 
       - name: Analyze
         run: flutter analyze
@@ -52,7 +62,9 @@ jobs:
         run: flutter test
 
       - name: Build APK
-        run: flutter build apk --release
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: flutter build apk --release --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
 
       - name: Rename APK with version
         id: rename

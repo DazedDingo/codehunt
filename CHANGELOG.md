@@ -4,6 +4,38 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.3.0 — 2026-05-10
+
+The zero-setup release.
+
+- **No more backend.** The app calls Gemini directly with a key baked in
+  at build time via `--dart-define`. Install the APK, share a URL from
+  Chrome, get results — no Linux box to maintain, no settings to fill in.
+- **Settings screen → About screen.** No more "API base URL" / "API token"
+  fields to confuse you. Just the logo, version, author, and source link.
+- **Launcher icon works.** The repo's `logo.svg` is rasterized in CI by
+  `librsvg`, then `flutter_launcher_icons` generates the Android mipmap
+  set (legacy + adaptive). The home screen now shows the actual codehunt
+  icon instead of the default Flutter robot.
+- **Backend deleted.** The `backend/` directory and its FastAPI proxy are
+  gone. If you want self-hosted key control, the git history still has it;
+  the simpler default is now the canonical path.
+- **CI secret.** The Gemini key lives as `GEMINI_API_KEY` in repo secrets,
+  not in source. The APK still contains it (necessarily — it has to call
+  the Gemini endpoint), but the source tree is clean.
+
+### Migration from v0.2.x
+
+If you had the backend running on an Oracle box, you can shut it down — the
+APK no longer needs it. Install the new APK over v0.2.1; old settings
+(backend URL / token) become unused but harmless.
+
+### A note on the baked-in key
+
+The key is a free-tier AI Studio key with a 1500 requests/day cap, no cost.
+Public APK means the quota is shared across everyone who downloads. If you
+hit the limit, rotate the `GEMINI_API_KEY` repo secret and push a new tag.
+
 ## v0.2.1 — 2026-05-10
 
 The share-intent release.
