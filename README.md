@@ -114,6 +114,20 @@ history.
 `codehunt --version` prints the installed version, and the version is
 shown at the top of human-readable output too — handy for bug reports.
 
+## Development
+
+Run lint + tests locally the same way CI does:
+
+```bash
+pip install ruff
+ruff check codehunt.py tests/
+python -m unittest discover -s tests -v
+```
+
+CI runs on every push and PR across Python 3.10 / 3.11 / 3.12 / 3.13. Tests
+cover pure functions (`extract_domain`, `_parse_json_loose`) and the CLI
+surface (`--version`, `--help`, missing-credential paths). No live API calls.
+
 ## License
 
 [MIT](LICENSE).

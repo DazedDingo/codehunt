@@ -4,6 +4,12 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## Unreleased
+
+- GitHub Actions CI on every push and PR: lint with `ruff` + unit tests on
+  Python 3.10 / 3.11 / 3.12 / 3.13. No live API calls in CI; pure functions
+  and CLI surface only.
+
 ## v0.1.0 — 2026-05-10
 
 The first release.
