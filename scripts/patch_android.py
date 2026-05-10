@@ -1,13 +1,36 @@
 #!/usr/bin/env python3
 """Patch Flutter-generated Android scaffolding for codehunt.
 
-Currently injects only the SEND intent filter into AndroidManifest.xml so that
-Chrome's share sheet shows codehunt as a target. Run from the app/ directory
-after `flutter create . --platforms=android`. Idempotent.
+Applies:
+  1. SEND intent filter to AndroidManifest.xml.
+  2. JVM 17 enforcement on every JavaCompile and KotlinCompile task across
+     every subproject. This bypasses the `android { compileOptions { ... } }`
+     extension (which AGP finalizes early) and goes straight to the tasks,
+     which can still be reconfigured at the time `subprojects { ... }` runs.
+
+Run from app/ after `flutter create . --platforms=android`. Idempotent.
 """
 
 import sys
 from pathlib import Path
+
+PATCH_MARKER = "// codehunt: JVM 17 task-level patch"
+
+SUBPROJECTS_PATCH = """
+
+""" + PATCH_MARKER + """
+allprojects {
+    tasks.withType(JavaCompile::class.java).configureEach {
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
+    }
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+}
+"""
 
 
 def patch_manifest() -> bool:
@@ -34,5 +57,20 @@ def patch_manifest() -> bool:
     return True
 
 
+def patch_root_gradle() -> bool:
+    gradle = Path("android/build.gradle.kts")
+    if not gradle.exists():
+        print(f"error: {gradle} not found", file=sys.stderr)
+        return False
+    text = gradle.read_text()
+    if PATCH_MARKER in text:
+        print("root gradle: already patched")
+        return True
+    gradle.write_text(text + SUBPROJECTS_PATCH)
+    print("root gradle: appended task-level JVM 17 enforcement")
+    return True
+
+
 if __name__ == "__main__":
-    sys.exit(0 if patch_manifest() else 1)
+    ok = patch_manifest() and patch_root_gradle()
+    sys.exit(0 if ok else 1)
