@@ -219,18 +219,40 @@ def _patch_groovy(gradle: Path) -> bool:
     if "keystoreProperties['keyAlias']" in text:
         print("gradle (groovy): signing config already wired — skipping")
         return True
-    # Insert keystore loader before `android {`, not before `plugins {` — Flutter's
-    # Groovy template uses `apply plugin: ...` not `plugins { ... }`.
-    text = re.sub(r"(?=^android \{)", SIGNING_BLOCK_GROOVY + "\n", text, count=1, flags=re.MULTILINE)
-    new_text = re.sub(r"android \{\n", "android {\n" + SIGNING_CONFIG_INJECT_GROOVY, text, count=1)
-    if new_text == text:
-        print("error: could not find 'android {' block in build.gradle", file=sys.stderr)
+
+    # Insert keystore loader before `android {`.
+    new = re.sub(r"(?=^android \{)", SIGNING_BLOCK_GROOVY + "\n", text, count=1, flags=re.MULTILINE)
+    if new == text:
+        print("error: could not find 'android {' in build.gradle (loader injection)", file=sys.stderr)
         return False
-    text = new_text.replace(
-        "signingConfig signingConfigs.debug",
+    text = new
+
+    # Insert signingConfigs block inside the android { ... } body.
+    new = re.sub(r"android \{\n", "android {\n" + SIGNING_CONFIG_INJECT_GROOVY, text, count=1)
+    if new == text:
+        print("error: could not find 'android {' newline (block injection)", file=sys.stderr)
+        return False
+    text = new
+
+    # Swap the release buildType to point at signingConfigs.release. The Flutter
+    # template comments out the line in some versions, or uses different
+    # spacing — use a regex that tolerates both, and fail loudly if it misses.
+    new = re.sub(
+        r"signingConfig\s+signingConfigs\.debug",
         "signingConfig signingConfigs.release",
-        1,
+        text,
+        count=1,
     )
+    if new == text:
+        print(
+            "error: could not find `signingConfig signingConfigs.debug` to swap.\n"
+            "       The Flutter template may have changed — dumping gradle file:\n"
+            "----- build.gradle -----\n" + text + "\n----- end -----",
+            file=sys.stderr,
+        )
+        return False
+    text = new
+
     gradle.write_text(text)
     print(f"gradle (groovy): wired release signing config at {gradle}")
     return True
