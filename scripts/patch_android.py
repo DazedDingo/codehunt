@@ -3,15 +3,47 @@
 
 Applies:
   1. SEND intent filter to AndroidManifest.xml (so Chrome's share sheet sees us).
-  2. JVM 17 target in app/build.gradle.kts (receive_sharing_intent compiles
-     Kotlin to JVM 17; Flutter's default Java target is 11 → mismatch).
+  2. JVM 17 enforcement on every subproject (app + every plugin module).
+     receive_sharing_intent compiles its own Kotlin to JVM 17, but the Java
+     compile task on plugin modules falls back to JVM 1.8 by default — Gradle
+     hard-fails the release build on this mismatch. The subprojects block
+     below forces every Android module to compile both Java and Kotlin to 17.
 
 Run from app/ after `flutter create . --platforms=android`. Idempotent.
 """
 
-import re
 import sys
 from pathlib import Path
+
+# Compatible with both old kotlinOptions DSL and current Android Gradle Plugin.
+SUBPROJECTS_PATCH = """
+
+subprojects {
+    afterEvaluate {
+        plugins.withId("com.android.application") {
+            extensions.configure<com.android.build.gradle.BaseExtension>("android") {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+            }
+        }
+        plugins.withId("com.android.library") {
+            extensions.configure<com.android.build.gradle.BaseExtension>("android") {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+            }
+        }
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+            kotlinOptions.jvmTarget = "17"
+        }
+    }
+}
+"""
+
+PATCH_MARKER = "// codehunt: JVM 17 subprojects patch"
 
 
 def patch_manifest() -> bool:
@@ -38,41 +70,20 @@ def patch_manifest() -> bool:
     return True
 
 
-def patch_gradle() -> bool:
-    gradle = Path("android/app/build.gradle.kts")
+def patch_root_gradle() -> bool:
+    gradle = Path("android/build.gradle.kts")
     if not gradle.exists():
         print(f"error: {gradle} not found", file=sys.stderr)
         return False
     text = gradle.read_text()
-
-    # Java source/target compatibility → 17
-    text = re.sub(
-        r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_\d+",
-        "sourceCompatibility = JavaVersion.VERSION_17",
-        text,
-    )
-    text = re.sub(
-        r"targetCompatibility\s*=\s*JavaVersion\.VERSION_\d+",
-        "targetCompatibility = JavaVersion.VERSION_17",
-        text,
-    )
-    # Kotlin jvmTarget → 17
-    text = re.sub(
-        r"jvmTarget\s*=\s*JavaVersion\.VERSION_\d+\.toString\(\)",
-        'jvmTarget = JavaVersion.VERSION_17.toString()',
-        text,
-    )
-    text = re.sub(
-        r'jvmTarget\s*=\s*"\d+"',
-        'jvmTarget = "17"',
-        text,
-    )
-
-    gradle.write_text(text)
-    print("gradle: patched JVM targets to 17")
+    if PATCH_MARKER in text:
+        print("root gradle: already patched")
+        return True
+    gradle.write_text(text + "\n" + PATCH_MARKER + SUBPROJECTS_PATCH)
+    print("root gradle: appended JVM 17 subprojects block")
     return True
 
 
 if __name__ == "__main__":
-    ok = patch_manifest() and patch_gradle()
+    ok = patch_manifest() and patch_root_gradle()
     sys.exit(0 if ok else 1)
