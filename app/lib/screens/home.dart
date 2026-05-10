@@ -19,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
   Future<HuntResult>? _pending;
   List<String> _history = [];
+  List<String> _pinned = [];
   ConfidenceFilter _filter = ConfidenceFilter.medium;
 
   bool _passesFilter(CouponCode c) {
@@ -40,8 +41,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _bootstrap() async {
     final history = await Storage.history();
+    final pinned = await Storage.pinned();
     if (!mounted) return;
-    setState(() => _history = history);
+    setState(() {
+      _history = history;
+      _pinned = pinned;
+    });
 
     final initial = await ShareReceiver.getInitialShare();
     if (initial != null && initial.isNotEmpty) {
@@ -52,8 +57,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _reloadHistory() async {
     final h = await Storage.history();
+    final p = await Storage.pinned();
     if (!mounted) return;
-    setState(() => _history = h);
+    setState(() {
+      _history = h;
+      _pinned = p;
+    });
+  }
+
+  Future<void> _togglePin(String domain) async {
+    final isNowPinned = await Storage.togglePin(domain);
+    await _reloadHistory();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${isNowPinned ? "Pinned" : "Unpinned"} $domain'),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _onShared(String text) {
@@ -61,19 +83,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _runHunt();
   }
 
-  void _runHunt() {
+  void _runHunt({bool force = false}) {
     final target = _controller.text.trim();
     if (target.isEmpty) return;
     setState(() {
-      _pending = _huntWithCache(target);
+      _pending = _huntWithCache(target, force: force);
     });
   }
 
-  /// Cache-aware hunt: returns the cached result if there's a fresh entry,
-  /// otherwise hits Gemini and caches the result on success.
-  Future<HuntResult> _huntWithCache(String target) async {
+  /// Cache-aware hunt. If `force` is true, the cache is bypassed and Gemini
+  /// is called directly — used by pull-to-refresh.
+  Future<HuntResult> _huntWithCache(String target, {bool force = false}) async {
     final domain = extractDomain(target);
-    if (domain.isNotEmpty) {
+    if (!force && domain.isNotEmpty) {
       final cached = await Storage.getCached(domain);
       if (cached != null) {
         await Storage.recordHunt(domain);
@@ -88,6 +110,20 @@ class _HomeScreenState extends State<HomeScreen> {
       _reloadHistory();
     }
     return result;
+  }
+
+  Future<void> _refresh() async {
+    final target = _controller.text.trim();
+    if (target.isEmpty) return;
+    final future = _huntWithCache(target, force: true);
+    setState(() => _pending = future);
+    // RefreshIndicator holds the spinner until this Future resolves.
+    try {
+      await future;
+    } catch (_) {
+      // _resultsView renders the error; don't rethrow here or RefreshIndicator
+      // crashes the gesture loop.
+    }
   }
 
   Future<void> _openAbout() async {
@@ -139,14 +175,16 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text('Hunt'),
               onPressed: _runHunt,
             ),
-            if (_history.isNotEmpty) ...[
+            if (_history.isNotEmpty || _pinned.isNotEmpty) ...[
               const SizedBox(height: 12),
               _HistoryRow(
                 history: _history,
+                pinned: _pinned,
                 onPick: (d) {
                   _controller.text = d;
                   _runHunt();
                 },
+                onTogglePin: _togglePin,
               ),
             ],
             const SizedBox(height: 16),
@@ -158,31 +196,61 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _resultsList(List<CouponCode> allCodes, List<CouponCode> filtered) {
+    // RefreshIndicator needs a scrollable child — wrap empty states in a
+    // ListView so pull-to-refresh still works when there are no results.
+    Widget body;
     if (allCodes.isEmpty) {
-      return const Center(child: Text('No codes found.'));
-    }
-    if (filtered.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            'No codes pass the "${_filter.name}" filter. '
-            'Try "all" to see ${allCodes.length} lower-confidence result${allCodes.length == 1 ? '' : 's'}.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.grey),
+      body = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 200),
+          Center(child: Text('No codes found.')),
+        ],
+      );
+    } else if (filtered.isEmpty) {
+      body = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 160),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              'No codes pass the "${_filter.name}" filter. '
+              'Try "all" to see ${allCodes.length} lower-confidence result${allCodes.length == 1 ? '' : 's'}.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey),
+            ),
           ),
-        ),
+        ],
+      );
+    } else {
+      body = ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: filtered.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (_, i) => _CodeTile(code: filtered[i]),
       );
     }
-    return ListView.separated(
-      itemCount: filtered.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) => _CodeTile(code: filtered[i]),
-    );
+    return RefreshIndicator(onRefresh: _refresh, child: body);
   }
 
   Widget _resultsView() {
+    // AnimatedSwitcher cross-fades between empty / pending hunts whenever the
+    // `key` changes. Keying by the Future's identityHashCode means a new hunt
+    // (share-triggered or button-triggered) fades the previous result out.
     final pending = _pending;
+    final keyId = pending == null ? 'empty' : identityHashCode(pending).toString();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+      child: KeyedSubtree(
+        key: ValueKey(keyId),
+        child: _resultsContent(pending),
+      ),
+    );
+  }
+
+  Widget _resultsContent(Future<HuntResult>? pending) {
     if (pending == null) {
       return const Center(
         child: Text(
@@ -266,23 +334,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _HistoryRow extends StatelessWidget {
   final List<String> history;
+  final List<String> pinned;
   final void Function(String domain) onPick;
-  const _HistoryRow({required this.history, required this.onPick});
+  final void Function(String domain) onTogglePin;
+  const _HistoryRow({
+    required this.history,
+    required this.pinned,
+    required this.onPick,
+    required this.onTogglePin,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Pinned first (in pin order), then recent history minus already-pinned,
+    // capped at 12 visible chips.
+    final pinnedSet = pinned.toSet();
+    final unpinned = history.where((d) => !pinnedSet.contains(d)).toList();
+    final ordered = [...pinned, ...unpinned].take(12).toList();
     return SizedBox(
       height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: history.length.clamp(0, 12),
+        itemCount: ordered.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
-          final domain = history[i];
-          return ActionChip(
-            label: Text(domain, style: const TextStyle(fontSize: 12)),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => onPick(domain),
+          final domain = ordered[i];
+          final isPinned = pinnedSet.contains(domain);
+          return GestureDetector(
+            onLongPress: () => onTogglePin(domain),
+            child: ActionChip(
+              avatar: isPinned
+                  ? const Icon(Icons.push_pin, size: 14)
+                  : null,
+              label: Text(domain, style: const TextStyle(fontSize: 12)),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => onPick(domain),
+            ),
           );
         },
       ),

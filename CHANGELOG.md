@@ -4,6 +4,32 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.6.0 — 2026-05-10
+
+Three more app polish features.
+
+- **Pull-to-refresh.** Drag down on the result list and codehunt
+  re-queries Gemini directly, bypassing the 1-hour cache. The standard
+  Material `RefreshIndicator` shows the spinner until the new result
+  comes back. Works even on empty/error states (empty list is still
+  scrollable).
+- **Domain pinning.** Long-press a history chip to pin/unpin it. Pinned
+  domains float to the top of the chip row with a 📌 icon and stay
+  there even when they fall outside the 20-entry recency cap. Good for
+  the 3–4 sites you actually shop at regularly.
+- **Cross-fade between hunts.** The result area now uses
+  `AnimatedSwitcher` keyed by the pending Future, so when a new share
+  comes in while you're looking at a previous result, the old result
+  fades out and the spinner/new result fades in. Smoother feel for
+  rapid share-from-Chrome flow.
+- **About → Clear history & cache** also clears pins.
+
+### Migration from v0.5.0
+
+In-place update — same signing key, same storage format additively
+extended (pinned list is a new key; existing history and cache carry
+forward).
+
 ## v0.5.0 — 2026-05-10
 
 Three more quality-of-life features in one release. Results are now both

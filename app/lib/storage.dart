@@ -8,6 +8,7 @@ import 'gemini.dart';
 /// Both backed by SharedPreferences, both keyed by domain.
 class Storage {
   static const _historyKey = 'history_v1';
+  static const _pinnedKey = 'pinned_v1';
   static const _cachePrefix = 'cache_v1_';
   static const cacheTtl = Duration(hours: 1);
   static const maxHistory = 20;
@@ -28,6 +29,32 @@ class Storage {
       current.removeRange(maxHistory, current.length);
     }
     await prefs.setStringList(_historyKey, current);
+  }
+
+  // --- Pinned ---------------------------------------------------------------
+
+  static Future<List<String>> pinned() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_pinnedKey) ?? const [];
+  }
+
+  static Future<bool> isPinned(String domain) async {
+    final list = await pinned();
+    return list.contains(domain);
+  }
+
+  /// Returns true if the domain is now pinned, false if unpinned.
+  static Future<bool> togglePin(String domain) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = [...?prefs.getStringList(_pinnedKey)];
+    final isNowPinned = !current.contains(domain);
+    if (isNowPinned) {
+      current.insert(0, domain);
+    } else {
+      current.remove(domain);
+    }
+    await prefs.setStringList(_pinnedKey, current);
+    return isNowPinned;
   }
 
   // --- Cache ----------------------------------------------------------------
@@ -82,7 +109,10 @@ class Storage {
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().where(
-          (k) => k == _historyKey || k.startsWith(_cachePrefix),
+          (k) =>
+              k == _historyKey ||
+              k == _pinnedKey ||
+              k.startsWith(_cachePrefix),
         );
     for (final k in keys) {
       await prefs.remove(k);
