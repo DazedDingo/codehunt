@@ -17,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
   Settings? _settings;
   Future<HuntResult>? _pending;
-  StreamSubscription<List<SharedMediaFile>>? _intentSub;
+  StreamSubscription<String>? _intentSub;
 
   @override
   void initState() {
@@ -30,18 +30,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() => _settings = s);
 
-    // Pick up a share intent that launched the app.
-    final initial = await ReceiveSharingIntent.getInitialMedia();
-    if (initial.isNotEmpty) {
-      _onShared(initial.first.path);
+    // Chrome shares URLs as text/plain. The package surfaces this via
+    // getInitialText (cold-launch) and getTextStream (hot-share).
+    final initial = await ReceiveSharingIntent.getInitialText();
+    if (initial != null && initial.isNotEmpty) {
+      _onShared(initial);
     }
-
-    // Pick up shares while the app is already running.
-    _intentSub = ReceiveSharingIntent.getMediaStream().listen(
-      (files) {
-        if (files.isNotEmpty) _onShared(files.first.path);
-      },
-    );
+    _intentSub = ReceiveSharingIntent.getTextStream().listen(_onShared);
   }
 
   void _onShared(String text) {
