@@ -234,12 +234,13 @@ def _patch_groovy(gradle: Path) -> bool:
         return False
     text = new
 
-    # Swap the release buildType to point at signingConfigs.release. The Flutter
-    # template comments out the line in some versions, or uses different
-    # spacing — use a regex that tolerates both, and fail loudly if it misses.
+    # Swap the release buildType to point at signingConfigs.release. Flutter
+    # 3.24+ emits `signingConfig = signingConfigs.debug` (property-assignment);
+    # older templates used the method-call form `signingConfig signingConfigs.debug`.
+    # Match both, fail loudly if neither is present.
     new = re.sub(
-        r"signingConfig\s+signingConfigs\.debug",
-        "signingConfig signingConfigs.release",
+        r"signingConfig\s*=?\s*signingConfigs\.debug",
+        "signingConfig = signingConfigs.release",
         text,
         count=1,
     )
