@@ -4,6 +4,26 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.3.1 — 2026-05-10
+
+Critical fixes on top of v0.3.0.
+
+- **Fixes "no address associated with hostname" on every search.** Flutter's
+  `flutter create` only injects `<uses-permission android:name="android.permission.INTERNET" />`
+  into the *debug* manifest, not the release one. So `release` builds shipped
+  without internet permission — DNS resolved as "no such host" for every
+  Gemini call. The manifest patcher now adds the permission explicitly.
+- **Fixes "uninstall before update" on every release.** v0.3.0 was
+  debug-signed with a fresh keystore on each CI run, so Android refused to
+  recognize new APKs as upgrades of the existing install. v0.3.1 introduces
+  a stable release-signing keystore stored as a GitHub Actions secret. From
+  now on, future updates install in-place without uninstalling first.
+
+### Migration
+
+You'll need to uninstall v0.3.0 one more time, then install v0.3.1. Going
+forward, v0.3.1 → v0.3.2 → v0.4.x will install over the top cleanly.
+
 ## v0.3.0 — 2026-05-10
 
 The zero-setup release.

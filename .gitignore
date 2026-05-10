@@ -12,3 +12,9 @@ __pycache__/
 .env.*
 !.env.example
 *.log
+
+# Android release signing — keystore + properties are written by CI from secrets,
+# and developers can write their own for local release builds.
+*.jks
+*.keystore
+key.properties

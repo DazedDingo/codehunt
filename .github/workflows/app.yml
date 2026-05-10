@@ -46,8 +46,23 @@ jobs:
       - name: Scaffold platform code
         run: flutter create . --project-name codehunt --org com.dazeddingo --platforms=android
 
-      - name: Patch AndroidManifest + MainActivity for share intent
+      - name: Patch AndroidManifest + MainActivity + signing config
         run: python3 ../scripts/patch_android.py
+
+      - name: Write release keystore + key.properties
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > android/codehunt-release.jks
+          cat > android/key.properties <<EOF
+          storeFile=../codehunt-release.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
 
       - name: Get dependencies
         run: flutter pub get
