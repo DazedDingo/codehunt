@@ -50,7 +50,13 @@ class HuntResult {
   final String domain;
   final String summary;
   final List<CouponCode> codes;
-  HuntResult({required this.domain, required this.summary, required this.codes});
+  final bool fromCache;
+  HuntResult({
+    required this.domain,
+    required this.summary,
+    required this.codes,
+    this.fromCache = false,
+  });
 }
 
 class CouponCode {

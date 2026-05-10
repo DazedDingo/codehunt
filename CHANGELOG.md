@@ -4,6 +4,31 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.4.0 — 2026-05-10
+
+Three quality-of-life features in one release.
+
+- **Search history.** Recent hunted domains show as horizontally-scrolling
+  chips above the results area. Tap to re-hunt. Capped at 20, newest first.
+  Persisted across launches.
+- **Per-domain result cache (1-hour TTL).** Same domain queried within an
+  hour returns the previous result instead of re-burning Gemini quota.
+  Cached results show a small `cached` badge next to the domain so you know
+  they're not live. If you want a fresh hunt, tap **Clear history & cache**
+  on the About screen.
+- **Tap a code to copy.** Single tap on any code in the result list copies
+  it to the clipboard and shows a brief snackbar confirmation. A small copy
+  icon on the right edge of each row reinforces the affordance. No more
+  long-press selection dance.
+- **About screen gained a "Clear history & cache" button.** Asks for
+  confirmation before wiping.
+
+### Migration from v0.3.1
+
+In-place update — the stable v0.3.1 signing key carries forward. No
+uninstall needed. Existing settings (none) are unaffected; history and
+cache start empty on first launch.
+
 ## v0.3.1 — 2026-05-10
 
 Critical fixes on top of v0.3.0.
