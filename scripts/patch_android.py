@@ -71,7 +71,7 @@ class MainActivity : FlutterActivity() {
 }
 """
 
-SIGNING_BLOCK = """
+SIGNING_BLOCK_KTS = """
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = java.util.Properties()
 if (keystorePropertiesFile.exists()) {
@@ -79,12 +79,31 @@ if (keystorePropertiesFile.exists()) {
 }
 """
 
-SIGNING_CONFIG_INJECT = """    signingConfigs {
+SIGNING_CONFIG_INJECT_KTS = """    signingConfigs {
         create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String?
             keyPassword = keystoreProperties["keyPassword"] as String?
             storeFile = keystoreProperties["storeFile"]?.let { file(it.toString()) }
             storePassword = keystoreProperties["storePassword"] as String?
+        }
+    }
+
+"""
+
+SIGNING_BLOCK_GROOVY = """
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+"""
+
+SIGNING_CONFIG_INJECT_GROOVY = """    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
         }
     }
 
@@ -162,45 +181,60 @@ def patch_main_activity() -> bool:
 
 
 def patch_signing_config() -> bool:
-    """Wire app/build.gradle.kts to read signing config from android/key.properties.
+    """Wire the app gradle file to read signing config from android/key.properties.
 
-    The CI workflow writes key.properties from secrets before running this
-    script doesn't need to — but the gradle changes do.
+    Handles both Kotlin DSL (`build.gradle.kts`, Flutter 3.27+) and the older
+    Groovy DSL (`build.gradle`, Flutter ≤3.26). Detects which one exists.
     """
-    gradle = Path("android/app/build.gradle.kts")
-    if not gradle.exists():
-        print(f"error: {gradle} not found", file=sys.stderr)
-        return False
+    kts = Path("android/app/build.gradle.kts")
+    groovy = Path("android/app/build.gradle")
+    if kts.exists():
+        return _patch_kts(kts)
+    if groovy.exists():
+        return _patch_groovy(groovy)
+    print("error: neither build.gradle.kts nor build.gradle found in android/app/", file=sys.stderr)
+    return False
+
+
+def _patch_kts(gradle: Path) -> bool:
     text = gradle.read_text()
-
     if 'keystoreProperties["keyAlias"]' in text:
-        print("gradle: signing config already wired — skipping")
+        print("gradle (kts): signing config already wired — skipping")
         return True
-
-    # Insert keystore properties loader at the top of the file (after plugins block).
-    text = text.replace("plugins {", SIGNING_BLOCK + "plugins {", 1)
-
-    # Insert signingConfigs block at the top of `android {` body.
-    new_text = re.sub(
-        r"android \{\n",
-        "android {\n" + SIGNING_CONFIG_INJECT,
-        text,
-        count=1,
-    )
+    text = text.replace("plugins {", SIGNING_BLOCK_KTS + "plugins {", 1)
+    new_text = re.sub(r"android \{\n", "android {\n" + SIGNING_CONFIG_INJECT_KTS, text, count=1)
     if new_text == text:
-        print("error: could not find 'android {' block in gradle file", file=sys.stderr)
+        print("error: could not find 'android {' block in build.gradle.kts", file=sys.stderr)
         return False
-    text = new_text
-
-    # Point release builds at the release signing config.
-    text = text.replace(
+    text = new_text.replace(
         'signingConfig = signingConfigs.getByName("debug")',
         'signingConfig = signingConfigs.getByName("release")',
         1,
     )
-
     gradle.write_text(text)
-    print("gradle: wired release signing config")
+    print(f"gradle (kts): wired release signing config at {gradle}")
+    return True
+
+
+def _patch_groovy(gradle: Path) -> bool:
+    text = gradle.read_text()
+    if "keystoreProperties['keyAlias']" in text:
+        print("gradle (groovy): signing config already wired — skipping")
+        return True
+    # Insert keystore loader before `android {`, not before `plugins {` — Flutter's
+    # Groovy template uses `apply plugin: ...` not `plugins { ... }`.
+    text = re.sub(r"(?=^android \{)", SIGNING_BLOCK_GROOVY + "\n", text, count=1, flags=re.MULTILINE)
+    new_text = re.sub(r"android \{\n", "android {\n" + SIGNING_CONFIG_INJECT_GROOVY, text, count=1)
+    if new_text == text:
+        print("error: could not find 'android {' block in build.gradle", file=sys.stderr)
+        return False
+    text = new_text.replace(
+        "signingConfig signingConfigs.debug",
+        "signingConfig signingConfigs.release",
+        1,
+    )
+    gradle.write_text(text)
+    print(f"gradle (groovy): wired release signing config at {gradle}")
     return True
 
 
