@@ -31,15 +31,13 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _settings = s);
 
     // Pick up a share intent that launched the app.
-    final initial =
-        await ReceiveSharingIntent.instance.getInitialMedia();
+    final initial = await ReceiveSharingIntent.getInitialMedia();
     if (initial.isNotEmpty) {
       _onShared(initial.first.path);
-      ReceiveSharingIntent.instance.reset();
     }
 
     // Pick up shares while the app is already running.
-    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen(
+    _intentSub = ReceiveSharingIntent.getMediaStream().listen(
       (files) {
         if (files.isNotEmpty) _onShared(files.first.path);
       },
