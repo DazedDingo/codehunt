@@ -202,7 +202,7 @@ class _CodeTile extends StatelessWidget {
     final c = _confidenceColor();
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: c.withOpacity(0.15),
+        backgroundColor: c.withValues(alpha: 0.15),
         child: Icon(Icons.local_offer, color: c),
       ),
       title: SelectableText(
