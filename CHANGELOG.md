@@ -9,11 +9,8 @@ commit subjects.
 The mobile release.
 
 - **Android app.** Native Flutter app you sideload from the Releases page.
-  Enter a URL or share one to it from Chrome and it queries your backend.
-  Settings screen shows the installed version + DazedDingo signature.
-- **Share-to-codehunt.** When you're on a checkout page in Chrome, tap Share
-  → codehunt. The URL pre-fills and the hunt runs automatically. Cuts the
-  whole "type a domain into a CLI" friction the v0.1 design had on mobile.
+  Enter a URL, get a confidence-ranked list of codes back. Settings screen
+  shows the installed version + DazedDingo signature.
 - **Backend (`backend/`).** Thin FastAPI proxy that lives on a Linux box you
   control. The Gemini key stays on the server; the app talks to it with a
   bearer token you generate. Reuses the CLI's `hunt_gemini` / `hunt_claude`
@@ -23,6 +20,17 @@ The mobile release.
   Actions builds `codehunt-vX.Y.Z.apk` and uploads it to the Release page —
   no manual builds.
 - **Lint widened to cover `backend/` and `scripts/`** in the existing CI.
+
+### Deferred to v0.2.1
+
+- **Share-to-codehunt from Chrome.** I tried wiring this up via the
+  `receive_sharing_intent` package but every recent version forces a Kotlin
+  JVM 17 / Java 1.8 mismatch on the plugin module that Gradle 8+ refuses to
+  build, and AGP finalizes `compileOptions` before any subprojects hook can
+  override it. Older versions of the package (1.4.5) work but predate AGP
+  8's namespace requirement. v0.2.1 will ship a native MainActivity +
+  method-channel implementation — bypasses the third-party gradle problem
+  entirely.
 
 ### Migration from v0.1.0
 

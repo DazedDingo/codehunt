@@ -11,12 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
-  # Pinned: 1.6+ compiles Kotlin to JVM 17 which conflicts with AGP's
-  # default 1.8 Java target on plugin modules — the build hard-fails and
-  # the JVM target can't be patched late (extension finalizes early).
-  # 1.4.5 is the last release built against Kotlin 1.x / JVM 1.8.
-  # Uses the simpler getInitialText / getTextStream API.
-  receive_sharing_intent: 1.4.5
   package_info_plus: ^8.0.2
   shared_preferences: ^2.3.2
   flutter_svg: ^2.0.10+1

@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import '../api.dart';
 import '../settings.dart';
@@ -17,7 +14,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
   Settings? _settings;
   Future<HuntResult>? _pending;
-  StreamSubscription<String>? _intentSub;
 
   @override
   void initState() {
@@ -29,19 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final s = await Settings.load();
     if (!mounted) return;
     setState(() => _settings = s);
-
-    // Chrome shares URLs as text/plain. The package surfaces this via
-    // getInitialText (cold-launch) and getTextStream (hot-share).
-    final initial = await ReceiveSharingIntent.getInitialText();
-    if (initial != null && initial.isNotEmpty) {
-      _onShared(initial);
-    }
-    _intentSub = ReceiveSharingIntent.getTextStream().listen(_onShared);
-  }
-
-  void _onShared(String text) {
-    _controller.text = text.trim();
-    _runHunt();
   }
 
   void _runHunt() {
@@ -75,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _intentSub?.cancel();
     _controller.dispose();
     super.dispose();
   }
