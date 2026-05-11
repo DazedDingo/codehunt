@@ -4,6 +4,28 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.7.0 — 2026-05-11
+
+The "is this code legit?" release.
+
+- **Schema gains a `context` field.** Each result now carries 1-2
+  sentences quoted or paraphrased from the source page showing where the
+  code was found and any terms (expiry, minimum spend). Applies to both
+  the app and the CLI.
+- **Tap a code → detail bottom sheet.** Replaces the old snackbar. Shows
+  the code in large monospace, the discount, the source context quote in
+  a blockquote-style box, notes, the full source URL, and buttons to
+  open the source page in your browser or copy the code again. Code is
+  still copied to clipboard on the initial tap.
+- **CLI prints the snippet** under each code as `quote: "..."` when
+  available.
+
+### Migration from v0.6.0
+
+In-place update — same signing key. Cached results from v0.6.0 won't
+have a context field (treated as empty string until refreshed). Pull
+down to force a fresh hunt and pick up the context.
+
 ## v0.6.0 — 2026-05-10
 
 Three more app polish features.

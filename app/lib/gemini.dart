@@ -33,7 +33,8 @@ Return your answer as a single JSON object with this exact shape:
       "code": "<the code>",
       "discount": "<what it does>",
       "confidence": "high | medium | low",
-      "source": "<where you saw it>",
+      "source": "<fully-qualified URL to the page where you saw the code>",
+      "context": "<1-2 sentences quoted or paraphrased from the source page showing where the code appears and any terms (expiry, minimum spend). Empty string if not available.>",
       "notes": "<restrictions or empty string>"
     }
   ]
@@ -66,12 +67,14 @@ class CouponCode {
   final String discount;
   final String confidence;
   final String source;
+  final String context;
   final String notes;
   CouponCode({
     required this.code,
     required this.discount,
     required this.confidence,
     required this.source,
+    required this.context,
     required this.notes,
   });
 
@@ -80,6 +83,7 @@ class CouponCode {
         discount: (j['discount'] as String?) ?? '',
         confidence: (j['confidence'] as String?) ?? 'low',
         source: (j['source'] as String?) ?? '',
+        context: (j['context'] as String?) ?? '',
         notes: (j['notes'] as String?) ?? '',
       );
 

@@ -96,6 +96,7 @@ class Storage {
                   'discount': c.discount,
                   'confidence': c.confidence,
                   'source': c.source,
+                  'context': c.context,
                   'notes': c.notes,
                 })
             .toList(),

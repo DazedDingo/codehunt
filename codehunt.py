@@ -11,7 +11,7 @@ import os
 import sys
 from urllib.parse import urlparse
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # JSON schema used by the Claude path (structured outputs) and described in the
 # Gemini prompt (which can't combine grounding with response_schema reliably).
@@ -48,12 +48,27 @@ SCHEMA = {
                             "URL, fall back to the site name."
                         ),
                     },
+                    "context": {
+                        "type": "string",
+                        "description": (
+                            "1-2 sentences quoted or closely paraphrased from the source "
+                            "page showing where the code appears and any terms (expiry, "
+                            "minimum spend). Empty string if you can't find a snippet."
+                        ),
+                    },
                     "notes": {
                         "type": "string",
                         "description": "Restrictions, expiry hints, or caveats. Empty string if none.",
                     },
                 },
-                "required": ["code", "discount", "confidence", "source", "notes"],
+                "required": [
+                    "code",
+                    "discount",
+                    "confidence",
+                    "source",
+                    "context",
+                    "notes",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -230,6 +245,8 @@ def render_human(domain: str, provider: str, result: dict) -> None:
         print(f"           source: {c['source']}")
         if c.get("notes"):
             print(f"           note:   {c['notes']}")
+        if c.get("context"):
+            print(f'           quote:  "{c["context"]}"')
         print()
 
 

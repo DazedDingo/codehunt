@@ -408,17 +408,14 @@ class _CodeTile extends StatelessWidget {
     return null;
   }
 
-  void _copy(BuildContext context) {
+  void _copyAndOpenSheet(BuildContext context) {
     Clipboard.setData(ClipboardData(text: code.code));
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('Copied "${code.code}"'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _CodeDetailSheet(code: code),
+    );
   }
 
   Future<void> _openSource(BuildContext context) async {
@@ -438,7 +435,7 @@ class _CodeTile extends StatelessWidget {
     final sourceLaunchable = _sourceUri() != null;
     final sourceText = '${code.confidence} · ${code.source}';
     return ListTile(
-      onTap: () => _copy(context),
+      onTap: () => _copyAndOpenSheet(context),
       leading: CircleAvatar(
         backgroundColor: c.withOpacity(0.15),
         child: Icon(Icons.local_offer, color: c),
@@ -477,7 +474,173 @@ class _CodeTile extends StatelessWidget {
             ),
         ],
       ),
-      trailing: const Icon(Icons.content_copy, size: 18, color: Colors.grey),
+      trailing: const Icon(Icons.chevron_right, size: 22, color: Colors.grey),
+    );
+  }
+}
+
+class _CodeDetailSheet extends StatelessWidget {
+  final CouponCode code;
+  const _CodeDetailSheet({required this.code});
+
+  Uri? _sourceUri() {
+    final s = code.source.trim();
+    if (s.isEmpty) return null;
+    if (s.startsWith('http://') || s.startsWith('https://')) {
+      return Uri.tryParse(s);
+    }
+    if (s.contains('.') && !s.contains(' ')) {
+      return Uri.tryParse('https://$s');
+    }
+    return null;
+  }
+
+  Color _confidenceColor() {
+    switch (code.confidence) {
+      case 'high':
+        return Colors.green;
+      case 'medium':
+        return Colors.orange;
+      case 'low':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Future<void> _openSource(BuildContext context) async {
+    final uri = _sourceUri();
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Couldn't open ${uri.host}")),
+      );
+    }
+  }
+
+  void _copyAgain(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: code.code));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied "${code.code}"'),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uri = _sourceUri();
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          0,
+          24,
+          MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green[700], size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Copied to clipboard',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: Colors.green[800],
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _confidenceColor().withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    code.confidence,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _confidenceColor(),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              code.code,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(code.discount, style: theme.textTheme.bodyLarge),
+            const SizedBox(height: 16),
+            if (code.context.isNotEmpty) ...[
+              Text('Source context', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border(
+                    left: BorderSide(color: Colors.grey[400]!, width: 3),
+                  ),
+                ),
+                child: Text(
+                  code.context,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (code.notes.isNotEmpty) ...[
+              Text('Notes', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Text(code.notes, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 16),
+            ],
+            Text('Source', style: theme.textTheme.labelMedium),
+            const SizedBox(height: 4),
+            Text(
+              code.source.isEmpty ? '(unknown)' : code.source,
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (uri != null)
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: Text('Open ${uri.host}'),
+                    onPressed: () => _openSource(context),
+                  ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.content_copy, size: 18),
+                  label: const Text('Copy again'),
+                  onPressed: () => _copyAgain(context),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
