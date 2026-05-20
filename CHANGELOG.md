@@ -4,6 +4,41 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.8.0 — 2026-05-20
+
+Locale awareness + personal feedback loop. Plus dark theme default.
+
+- **Locale-aware prompting.** The domain's TLD (`.co.uk`, `.de`, `.com.au`,
+  …) now feeds a region + currency hint into the Gemini/Claude prompt.
+  UK shoppers should see noticeably less US-centric noise on `.co.uk`
+  sites; results lean on regional aggregators (hotukdeals, mydealz, etc.)
+  and format discounts in local currency where it matters. Applies to
+  both app and CLI.
+- **Worked / didn't-work feedback.** Detail bottom sheet now has 👍 / 👎
+  buttons. Tracked locally per (domain, code). On future hunts of the same
+  domain:
+  - 👍 codes float to the top of the list with a small green `worked`
+    badge, and the avatar becomes a check icon.
+  - 👎 codes sink to the bottom with strikethrough + a close icon avatar.
+  No API spend.
+- **Dark theme default.** App now forces dark mode (`ThemeMode.dark`).
+  Audited hardcoded greys/blues in the result tiles and detail sheet —
+  the "cached" badge, source-link blue, source-context blockquote, and
+  empty-state text all use Material 3 scheme colors now.
+- **About → Clear history & cache** also clears the feedback store.
+
+### Tests
+
+- New `tests/test_codehunt.py::TestLocaleHint` covers TLD → region mapping
+  including compound TLDs (`.co.uk`, `.com.au`) and unknown fall-through.
+- New `app/test/storage_test.dart` covers feedback round-trip, domain
+  isolation, pinning, and `clearAll` semantics.
+
+### Migration from v0.7.0
+
+In-place update — same signing key. Existing cached results don't carry
+context yet; pull-to-refresh on a cached domain to repopulate.
+
 ## v0.7.0 — 2026-05-11
 
 The "is this code legit?" release.

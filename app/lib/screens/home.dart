@@ -195,7 +195,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _resultsList(List<CouponCode> allCodes, List<CouponCode> filtered) {
+  void _onFeedbackChanged() {
+    // Bump a counter or just call setState so FutureBuilders re-fetch.
+    setState(() {});
+  }
+
+  Widget _resultsList(
+    String domain,
+    List<CouponCode> allCodes,
+    List<CouponCode> filtered,
+    Map<String, String> feedback,
+  ) {
     // RefreshIndicator needs a scrollable child — wrap empty states in a
     // ListView so pull-to-refresh still works when there are no results.
     Widget body;
@@ -228,7 +238,12 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         itemCount: filtered.length,
         separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (_, i) => _CodeTile(code: filtered[i]),
+        itemBuilder: (_, i) => _CodeTile(
+          domain: domain,
+          code: filtered[i],
+          feedback: feedback[filtered[i].code],
+          onFeedbackChanged: _onFeedbackChanged,
+        ),
       );
     }
     return RefreshIndicator(onRefresh: _refresh, child: body);
@@ -252,10 +267,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _resultsContent(Future<HuntResult>? pending) {
     if (pending == null) {
-      return const Center(
+      return Center(
         child: Text(
           'Enter a URL or share one from your browser.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -274,60 +291,91 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         final r = snap.data!;
-        final allCodes = [...r.codes]..sort((a, b) => a.rank.compareTo(b.rank));
-        final filtered = allCodes.where(_passesFilter).toList();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        return FutureBuilder<Map<String, String>>(
+          future: Storage.getFeedbackForDomain(r.domain),
+          builder: (context, fbSnap) {
+            final feedback = fbSnap.data ?? const <String, String>{};
+            return _renderResult(context, r, feedback);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _renderResult(
+    BuildContext context,
+    HuntResult r,
+    Map<String, String> feedback,
+  ) {
+    int feedbackRank(CouponCode c) {
+      // worked first, untracked second, didn't-work last
+      final f = feedback[c.code];
+      if (f == Storage.feedbackWorked) return 0;
+      if (f == Storage.feedbackDidntWork) return 2;
+      return 1;
+    }
+
+    final allCodes = [...r.codes]..sort((a, b) {
+      final byFeedback = feedbackRank(a).compareTo(feedbackRank(b));
+      if (byFeedback != 0) return byFeedback;
+      return a.rank.compareTo(b.rank);
+    });
+    final filtered = allCodes.where(_passesFilter).toList();
+
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    r.domain,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                if (r.fromCache)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'cached',
-                      style: TextStyle(fontSize: 11, color: Colors.blue),
-                    ),
-                  ),
-              ],
+            Expanded(
+              child: Text(
+                r.domain,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(r.summary, style: Theme.of(context).textTheme.bodySmall),
-            if (allCodes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Center(
-                child: SegmentedButton<ConfidenceFilter>(
-                  segments: const [
-                    ButtonSegment(value: ConfidenceFilter.high, label: Text('high')),
-                    ButtonSegment(value: ConfidenceFilter.medium, label: Text('medium+')),
-                    ButtonSegment(value: ConfidenceFilter.all, label: Text('all')),
-                  ],
-                  selected: {_filter},
-                  onSelectionChanged: (s) => setState(() => _filter = s.first),
-                  showSelectedIcon: false,
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
+            if (r.fromCache)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: scheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'cached',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSecondaryContainer,
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 8),
-            Expanded(
-              child: _resultsList(allCodes, filtered),
-            ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 4),
+        Text(r.summary, style: Theme.of(context).textTheme.bodySmall),
+        if (allCodes.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: SegmentedButton<ConfidenceFilter>(
+              segments: const [
+                ButtonSegment(value: ConfidenceFilter.high, label: Text('high')),
+                ButtonSegment(value: ConfidenceFilter.medium, label: Text('medium+')),
+                ButtonSegment(value: ConfidenceFilter.all, label: Text('all')),
+              ],
+              selected: {_filter},
+              onSelectionChanged: (s) => setState(() => _filter = s.first),
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Expanded(
+          child: _resultsList(r.domain, allCodes, filtered, feedback),
+        ),
+      ],
     );
   }
 }
@@ -378,8 +426,16 @@ class _HistoryRow extends StatelessWidget {
 }
 
 class _CodeTile extends StatelessWidget {
+  final String domain;
   final CouponCode code;
-  const _CodeTile({required this.code});
+  final String? feedback;
+  final VoidCallback onFeedbackChanged;
+  const _CodeTile({
+    required this.domain,
+    required this.code,
+    required this.feedback,
+    required this.onFeedbackChanged,
+  });
 
   Color _confidenceColor() {
     switch (code.confidence) {
@@ -414,7 +470,12 @@ class _CodeTile extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _CodeDetailSheet(code: code),
+      builder: (_) => _CodeDetailSheet(
+        domain: domain,
+        code: code,
+        initialFeedback: feedback,
+        onFeedbackChanged: onFeedbackChanged,
+      ),
     );
   }
 
@@ -434,18 +495,54 @@ class _CodeTile extends StatelessWidget {
     final c = _confidenceColor();
     final sourceLaunchable = _sourceUri() != null;
     final sourceText = '${code.confidence} · ${code.source}';
+    final worked = feedback == Storage.feedbackWorked;
+    final didntWork = feedback == Storage.feedbackDidntWork;
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
       onTap: () => _copyAndOpenSheet(context),
       leading: CircleAvatar(
         backgroundColor: c.withOpacity(0.15),
-        child: Icon(Icons.local_offer, color: c),
-      ),
-      title: Text(
-        code.code,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.bold,
+        child: Icon(
+          worked
+              ? Icons.check
+              : didntWork
+                  ? Icons.close
+                  : Icons.local_offer,
+          color: c,
         ),
+      ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              code.code,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.bold,
+                decoration: didntWork ? TextDecoration.lineThrough : null,
+                color: didntWork ? scheme.onSurfaceVariant : null,
+              ),
+            ),
+          ),
+          if (worked) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'worked',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.green,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,9 +554,9 @@ class _CodeTile extends StatelessWidget {
               child: Text(
                 sourceText,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.blue,
+                      color: scheme.primary,
                       decoration: TextDecoration.underline,
-                      decorationColor: Colors.blue,
+                      decorationColor: scheme.primary,
                     ),
               ),
             )
@@ -474,14 +571,37 @@ class _CodeTile extends StatelessWidget {
             ),
         ],
       ),
-      trailing: const Icon(Icons.chevron_right, size: 22, color: Colors.grey),
+      trailing: Icon(Icons.chevron_right, size: 22, color: scheme.onSurfaceVariant),
     );
   }
 }
 
-class _CodeDetailSheet extends StatelessWidget {
+class _CodeDetailSheet extends StatefulWidget {
+  final String domain;
   final CouponCode code;
-  const _CodeDetailSheet({required this.code});
+  final String? initialFeedback;
+  final VoidCallback onFeedbackChanged;
+  const _CodeDetailSheet({
+    required this.domain,
+    required this.code,
+    required this.initialFeedback,
+    required this.onFeedbackChanged,
+  });
+
+  @override
+  State<_CodeDetailSheet> createState() => _CodeDetailSheetState();
+}
+
+class _CodeDetailSheetState extends State<_CodeDetailSheet> {
+  late String? _feedback = widget.initialFeedback;
+
+  CouponCode get code => widget.code;
+
+  Future<void> _setFeedback(String? value) async {
+    setState(() => _feedback = value);
+    await Storage.setFeedback(widget.domain, code.code, value);
+    widget.onFeedbackChanged();
+  }
 
   Uri? _sourceUri() {
     final s = code.source.trim();
@@ -534,6 +654,9 @@ class _CodeDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final uri = _sourceUri();
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final worked = _feedback == Storage.feedbackWorked;
+    final didntWork = _feedback == Storage.feedbackDidntWork;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -548,19 +671,19 @@ class _CodeDetailSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green[700], size: 18),
+                Icon(Icons.check_circle, color: Colors.green, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Copied to clipboard',
                   style: theme.textTheme.labelMedium?.copyWith(
-                    color: Colors.green[800],
+                    color: Colors.green,
                   ),
                 ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _confidenceColor().withOpacity(0.15),
+                    color: _confidenceColor().withOpacity(0.18),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -592,17 +715,17 @@ class _CodeDetailSheet extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.08),
+                  color: scheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                   border: Border(
-                    left: BorderSide(color: Colors.grey[400]!, width: 3),
+                    left: BorderSide(color: scheme.outlineVariant, width: 3),
                   ),
                 ),
                 child: Text(
                   code.context,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontStyle: FontStyle.italic,
-                    color: Colors.grey[800],
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -619,6 +742,32 @@ class _CodeDetailSheet extends StatelessWidget {
             Text(
               code.source.isEmpty ? '(unknown)' : code.source,
               style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            Text('Did this code work?', style: theme.textTheme.labelMedium),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _FeedbackButton(
+                  icon: Icons.thumb_up,
+                  label: 'Worked',
+                  selected: worked,
+                  selectedColor: Colors.green,
+                  onPressed: () => _setFeedback(
+                    worked ? null : Storage.feedbackWorked,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _FeedbackButton(
+                  icon: Icons.thumb_down,
+                  label: "Didn't work",
+                  selected: didntWork,
+                  selectedColor: Colors.red,
+                  onPressed: () => _setFeedback(
+                    didntWork ? null : Storage.feedbackDidntWork,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -640,6 +789,36 @@ class _CodeDetailSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FeedbackButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final Color selectedColor;
+  final VoidCallback onPressed;
+  const _FeedbackButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      icon: Icon(icon, size: 18, color: selected ? selectedColor : null),
+      label: Text(label, style: TextStyle(color: selected ? selectedColor : null)),
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(
+          color: selected ? selectedColor : Theme.of(context).colorScheme.outline,
+        ),
+        backgroundColor: selected ? selectedColor.withOpacity(0.10) : null,
       ),
     );
   }

@@ -10,8 +10,13 @@ class Storage {
   static const _historyKey = 'history_v1';
   static const _pinnedKey = 'pinned_v1';
   static const _cachePrefix = 'cache_v1_';
+  static const _feedbackKey = 'feedback_v1';
   static const cacheTtl = Duration(hours: 1);
   static const maxHistory = 20;
+
+  /// Either `'worked'`, `'didnt_work'`, or `null` (no feedback).
+  static const feedbackWorked = 'worked';
+  static const feedbackDidntWork = 'didnt_work';
 
   // --- History --------------------------------------------------------------
 
@@ -105,6 +110,47 @@ class Storage {
     await prefs.setString('$_cachePrefix$domain', jsonEncode(entry));
   }
 
+  // --- Feedback (per domain/code) -------------------------------------------
+
+  static Future<Map<String, Map<String, String>>> _allFeedback() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_feedbackKey);
+    if (raw == null) return {};
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final entry in decoded.entries)
+          entry.key: Map<String, String>.from(entry.value as Map),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<String?> getFeedback(String domain, String code) async {
+    final all = await _allFeedback();
+    return all[domain]?[code];
+  }
+
+  static Future<Map<String, String>> getFeedbackForDomain(String domain) async {
+    final all = await _allFeedback();
+    return all[domain] ?? const {};
+  }
+
+  /// Sets feedback to one of [feedbackWorked] / [feedbackDidntWork], or
+  /// clears it when [value] is null.
+  static Future<void> setFeedback(String domain, String code, String? value) async {
+    final all = await _allFeedback();
+    if (value == null) {
+      all[domain]?.remove(code);
+      if (all[domain]?.isEmpty ?? false) all.remove(domain);
+    } else {
+      all.putIfAbsent(domain, () => <String, String>{})[code] = value;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_feedbackKey, jsonEncode(all));
+  }
+
   // --- Bulk reset -----------------------------------------------------------
 
   static Future<void> clearAll() async {
@@ -113,6 +159,7 @@ class Storage {
           (k) =>
               k == _historyKey ||
               k == _pinnedKey ||
+              k == _feedbackKey ||
               k.startsWith(_cachePrefix),
         );
     for (final k in keys) {

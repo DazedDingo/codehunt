@@ -11,7 +11,7 @@ import os
 import sys
 from urllib.parse import urlparse
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 # JSON schema used by the Claude path (structured outputs) and described in the
 # Gemini prompt (which can't combine grounding with response_schema reliably).
@@ -81,7 +81,55 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-PROMPT_TEMPLATE = """Find currently-working coupon, promo, or discount codes for this domain: {domain}
+TLD_LOCALES = {
+    "co.uk": "UK (currency £, GBP)",
+    "uk": "UK (currency £, GBP)",
+    "ie": "Ireland (currency €, EUR)",
+    "de": "Germany (currency €, EUR)",
+    "fr": "France (currency €, EUR)",
+    "it": "Italy (currency €, EUR)",
+    "es": "Spain (currency €, EUR)",
+    "nl": "Netherlands (currency €, EUR)",
+    "be": "Belgium (currency €, EUR)",
+    "pt": "Portugal (currency €, EUR)",
+    "se": "Sweden (currency kr, SEK)",
+    "no": "Norway (currency kr, NOK)",
+    "dk": "Denmark (currency kr, DKK)",
+    "fi": "Finland (currency €, EUR)",
+    "ch": "Switzerland (currency CHF)",
+    "at": "Austria (currency €, EUR)",
+    "pl": "Poland (currency zł, PLN)",
+    "ca": "Canada (currency CA$, CAD)",
+    "com.au": "Australia (currency AU$, AUD)",
+    "co.nz": "New Zealand (currency NZ$, NZD)",
+    "co.jp": "Japan (currency ¥, JPY)",
+    "jp": "Japan (currency ¥, JPY)",
+    "co.kr": "South Korea (currency ₩, KRW)",
+    "co.in": "India (currency ₹, INR)",
+    "in": "India (currency ₹, INR)",
+    "com.br": "Brazil (currency R$, BRL)",
+    "mx": "Mexico (currency MX$, MXN)",
+}
+
+
+def locale_hint_for_domain(domain: str) -> str:
+    """Map a domain TLD to a region/currency string used in the prompt.
+
+    Checks longer compound TLDs first (e.g. `.co.uk`) before single-label
+    ones (`.uk`) so the most specific match wins.
+    """
+    parts = domain.lower().split(".")
+    if len(parts) < 2:
+        return ""
+    # Try 2-part TLD, then 1-part TLD.
+    candidates = [".".join(parts[-2:]), parts[-1]]
+    for c in candidates:
+        if c in TLD_LOCALES:
+            return TLD_LOCALES[c]
+    return ""
+
+
+PROMPT_TEMPLATE = """Find currently-working coupon, promo, or discount codes for this domain: {domain}{locale_block}
 
 Search across multiple sources — RetailMeNot, Honey, Slickdeals, Reddit threads, \
 the merchant's own social media, recent forum posts. Look for codes that are recent \
@@ -168,7 +216,15 @@ def hunt_gemini(domain: str) -> dict:
         raise RuntimeError("GEMINI_API_KEY is not set")
 
     client = genai.Client(api_key=api_key)
-    prompt = PROMPT_TEMPLATE.format(domain=domain) + "\n\n" + JSON_INSTRUCTION
+    locale = locale_hint_for_domain(domain)
+    locale_block = (
+        f"\n\nThis appears to be a {locale} site. "
+        f"Prioritize regional coupon aggregators, shopping forums, and the merchant's "
+        f"own pages; format discount amounts in the local currency where appropriate."
+        if locale
+        else ""
+    )
+    prompt = PROMPT_TEMPLATE.format(domain=domain, locale_block=locale_block) + "\n\n" + JSON_INSTRUCTION
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -191,6 +247,16 @@ def hunt_claude(domain: str) -> dict:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set")
 
+    locale = locale_hint_for_domain(domain)
+    locale_block = (
+        f"\n\nThis appears to be a {locale} site. "
+        f"Prioritize regional coupon aggregators, shopping forums, and the merchant's "
+        f"own pages; format discount amounts in the local currency where appropriate."
+        if locale
+        else ""
+    )
+    prompt = PROMPT_TEMPLATE.format(domain=domain, locale_block=locale_block)
+
     client = anthropic.Anthropic()
     with client.messages.stream(
         model="claude-sonnet-4-6",
@@ -201,7 +267,7 @@ def hunt_claude(domain: str) -> dict:
             "effort": "high",
         },
         tools=[{"type": "web_search_20260209", "name": "web_search"}],
-        messages=[{"role": "user", "content": PROMPT_TEMPLATE.format(domain=domain)}],
+        messages=[{"role": "user", "content": prompt}],
     ) as stream:
         message = stream.get_final_message()
 

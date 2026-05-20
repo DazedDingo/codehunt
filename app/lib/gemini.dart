@@ -8,7 +8,46 @@ import 'package:http/http.dart' as http;
 const _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 const _model = 'gemini-2.5-flash';
 
-const _promptTemplate = '''Find currently-working coupon, promo, or discount codes for this domain: {domain}
+const _tldLocales = <String, String>{
+  'co.uk': 'UK (currency £, GBP)',
+  'uk': 'UK (currency £, GBP)',
+  'ie': 'Ireland (currency €, EUR)',
+  'de': 'Germany (currency €, EUR)',
+  'fr': 'France (currency €, EUR)',
+  'it': 'Italy (currency €, EUR)',
+  'es': 'Spain (currency €, EUR)',
+  'nl': 'Netherlands (currency €, EUR)',
+  'be': 'Belgium (currency €, EUR)',
+  'pt': 'Portugal (currency €, EUR)',
+  'se': 'Sweden (currency kr, SEK)',
+  'no': 'Norway (currency kr, NOK)',
+  'dk': 'Denmark (currency kr, DKK)',
+  'fi': 'Finland (currency €, EUR)',
+  'ch': 'Switzerland (currency CHF)',
+  'at': 'Austria (currency €, EUR)',
+  'pl': 'Poland (currency zł, PLN)',
+  'ca': 'Canada (currency CA\$, CAD)',
+  'com.au': 'Australia (currency AU\$, AUD)',
+  'co.nz': 'New Zealand (currency NZ\$, NZD)',
+  'co.jp': 'Japan (currency ¥, JPY)',
+  'jp': 'Japan (currency ¥, JPY)',
+  'co.kr': 'South Korea (currency ₩, KRW)',
+  'co.in': 'India (currency ₹, INR)',
+  'in': 'India (currency ₹, INR)',
+  'com.br': 'Brazil (currency R\$, BRL)',
+  'mx': 'Mexico (currency MX\$, MXN)',
+};
+
+String localeHintForDomain(String domain) {
+  final parts = domain.toLowerCase().split('.');
+  if (parts.length < 2) return '';
+  final compound = '${parts[parts.length - 2]}.${parts.last}';
+  if (_tldLocales.containsKey(compound)) return _tldLocales[compound]!;
+  if (_tldLocales.containsKey(parts.last)) return _tldLocales[parts.last]!;
+  return '';
+}
+
+const _promptTemplate = '''Find currently-working coupon, promo, or discount codes for this domain: {domain}{locale_block}
 
 Search across multiple sources — RetailMeNot, Honey, Slickdeals, Reddit threads, the merchant's own social media, recent forum posts. Look for codes that are recent and have positive feedback from real users.
 
@@ -125,7 +164,15 @@ Future<HuntResult> hunt(String target) async {
     'https://generativelanguage.googleapis.com/v1beta/'
     'models/$_model:generateContent?key=$_apiKey',
   );
-  final prompt = _promptTemplate.replaceAll('{domain}', domain);
+  final locale = localeHintForDomain(domain);
+  final localeBlock = locale.isEmpty
+      ? ''
+      : '\n\nThis appears to be a $locale site. '
+          'Prioritize regional coupon aggregators, shopping forums, and the merchant\'s '
+          'own pages; format discount amounts in the local currency where appropriate.';
+  final prompt = _promptTemplate
+      .replaceAll('{domain}', domain)
+      .replaceAll('{locale_block}', localeBlock);
 
   final response = await http
       .post(

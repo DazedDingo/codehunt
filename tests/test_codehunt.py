@@ -13,7 +13,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from codehunt import __version__, _parse_json_loose, extract_domain  # noqa: E402
+from codehunt import (  # noqa: E402
+    __version__,
+    _parse_json_loose,
+    extract_domain,
+    locale_hint_for_domain,
+)
 
 SCRIPT = ROOT / "codehunt.py"
 
@@ -36,6 +41,34 @@ class TestExtractDomain(unittest.TestCase):
 
     def test_lowercases(self):
         self.assertEqual(extract_domain("WWW.EXAMPLE.COM"), "example.com")
+
+
+class TestLocaleHint(unittest.TestCase):
+    def test_uk(self):
+        self.assertIn("UK", locale_hint_for_domain("thegainsboroughbathspa.co.uk"))
+
+    def test_uk_bare_tld(self):
+        self.assertIn("UK", locale_hint_for_domain("example.uk"))
+
+    def test_germany(self):
+        self.assertIn("Germany", locale_hint_for_domain("shop.de"))
+
+    def test_australia_compound_tld(self):
+        self.assertIn("Australia", locale_hint_for_domain("shop.com.au"))
+
+    def test_subdomain_uk(self):
+        # Compound TLD inside a subdomain
+        self.assertIn("UK", locale_hint_for_domain("checkout.example.co.uk"))
+
+    def test_us_unknown(self):
+        # .com is intentionally not in the table — let the model handle it.
+        self.assertEqual(locale_hint_for_domain("example.com"), "")
+
+    def test_empty(self):
+        self.assertEqual(locale_hint_for_domain(""), "")
+
+    def test_single_label(self):
+        self.assertEqual(locale_hint_for_domain("localhost"), "")
 
 
 class TestParseJsonLoose(unittest.TestCase):
