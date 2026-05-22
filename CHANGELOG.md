@@ -4,6 +4,39 @@ All notable changes to codehunt are documented here. Each release entry is
 written as plain-English bullets — what changed and why it matters — not raw
 commit subjects.
 
+## v0.9.0 — 2026-05-22
+
+Persistence + smarter ranking + deep-link entry.
+
+- **Confidence filter persists.** Your last filter choice (`high` /
+  `medium+` / `all`) is now remembered across launches via
+  `SharedPreferences`.
+- **Tap-behavior toggle.** New switch on the About screen: "Tap a code
+  opens detail sheet". On (default): tap = copy + sheet. Off: tap = copy
+  + snackbar, and each row gets an info icon that opens the sheet.
+- **Re-rank via prompt.** When a domain has thumbs-down feedback on
+  previous codes, the prompt now explicitly tells the model not to
+  surface those codes again — steers it toward genuinely-new alternatives
+  rather than just hiding rejected ones post-hoc.
+- **`codehunt://` deep link.** New URI scheme:
+  - `codehunt://hunt?url=https://example.com` — URL-encoded form
+  - `codehunt://example.com/checkout` — plain form
+  Both auto-fill the home screen and run the hunt. Works from Tasker,
+  Android Shortcuts, browser bookmarks, or any automation that fires
+  ACTION_VIEW intents.
+- **`Clear history & cache` now preserves settings** — your tap-behavior
+  toggle and filter pref survive a reset.
+
+### Tests
+
+- `app/test/storage_test.dart` gains preference round-trip tests and a
+  `clearAll preserves preferences` test pinning the new semantic.
+
+### Migration from v0.8.0
+
+In-place update — same signing key, same storage format additively
+extended.
+
 ## v0.8.0 — 2026-05-20
 
 Locale awareness + personal feedback loop. Plus dark theme default.

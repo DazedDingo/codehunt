@@ -11,12 +11,36 @@ class Storage {
   static const _pinnedKey = 'pinned_v1';
   static const _cachePrefix = 'cache_v1_';
   static const _feedbackKey = 'feedback_v1';
+  static const _filterKey = 'filter_v1';
+  static const _tapOpensSheetKey = 'tap_opens_sheet_v1';
   static const cacheTtl = Duration(hours: 1);
   static const maxHistory = 20;
 
   /// Either `'worked'`, `'didnt_work'`, or `null` (no feedback).
   static const feedbackWorked = 'worked';
   static const feedbackDidntWork = 'didnt_work';
+
+  // --- Preferences ----------------------------------------------------------
+
+  static Future<String> getFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_filterKey) ?? 'medium';
+  }
+
+  static Future<void> setFilter(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_filterKey, value);
+  }
+
+  static Future<bool> getTapOpensSheet() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_tapOpensSheetKey) ?? true;
+  }
+
+  static Future<void> setTapOpensSheet(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_tapOpensSheetKey, value);
+  }
 
   // --- History --------------------------------------------------------------
 
@@ -161,6 +185,8 @@ class Storage {
               k == _pinnedKey ||
               k == _feedbackKey ||
               k.startsWith(_cachePrefix),
+          // Preferences (_filterKey, _tapOpensSheetKey) intentionally survive
+          // a "Clear history & cache" — they're settings, not state.
         );
     for (final k in keys) {
       await prefs.remove(k);

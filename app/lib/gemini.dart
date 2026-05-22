@@ -47,7 +47,7 @@ String localeHintForDomain(String domain) {
   return '';
 }
 
-const _promptTemplate = '''Find currently-working coupon, promo, or discount codes for this domain: {domain}{locale_block}
+const _promptTemplate = '''Find currently-working coupon, promo, or discount codes for this domain: {domain}{locale_block}{skip_block}
 
 Search across multiple sources — RetailMeNot, Honey, Slickdeals, Reddit threads, the merchant's own social media, recent forum posts. Look for codes that are recent and have positive feedback from real users.
 
@@ -149,7 +149,7 @@ String extractDomain(String target) {
   return host;
 }
 
-Future<HuntResult> hunt(String target) async {
+Future<HuntResult> hunt(String target, {List<String> skipCodes = const []}) async {
   if (_apiKey.isEmpty) {
     throw HuntException(
       'No API key compiled in. Build with --dart-define=GEMINI_API_KEY=...',
@@ -170,9 +170,15 @@ Future<HuntResult> hunt(String target) async {
       : '\n\nThis appears to be a $locale site. '
           'Prioritize regional coupon aggregators, shopping forums, and the merchant\'s '
           'own pages; format discount amounts in the local currency where appropriate.';
+  final skipBlock = skipCodes.isEmpty
+      ? ''
+      : '\n\nThe user previously reported the following codes did NOT work on this '
+          'domain. Do not surface them again unless a brand-new reputable source has '
+          'reconfirmed them since: ${skipCodes.join(", ")}. Find alternatives instead.';
   final prompt = _promptTemplate
       .replaceAll('{domain}', domain)
-      .replaceAll('{locale_block}', localeBlock);
+      .replaceAll('{locale_block}', localeBlock)
+      .replaceAll('{skip_block}', skipBlock);
 
   final response = await http
       .post(

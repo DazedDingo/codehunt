@@ -25,6 +25,7 @@ from pathlib import Path
 MAIN_ACTIVITY_TEMPLATE = """%PACKAGE%
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -64,8 +65,27 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        when (intent?.action) {
+            // Chrome → Share → codehunt: URL arrives as EXTRA_TEXT.
+            Intent.ACTION_SEND -> {
+                if (intent.type == "text/plain") {
+                    sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                }
+            }
+            // Deep link: codehunt://hunt?url=https%3A%2F%2Fexample.com,
+            //           codehunt://example.com, etc. Used by Tasker, Shortcuts,
+            //           automation scripts, and other apps that want to route a
+            //           target into codehunt without using the share sheet.
+            Intent.ACTION_VIEW -> {
+                val uri: Uri? = intent.data
+                if (uri != null) {
+                    val q = uri.getQueryParameter("url")
+                    sharedText = q ?: run {
+                        val rest = uri.host.orEmpty() + uri.path.orEmpty()
+                        if (rest.isNotEmpty()) rest else null
+                    }
+                }
+            }
         }
     }
 }
@@ -140,6 +160,12 @@ def patch_manifest() -> bool:
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="codehunt" />
+            </intent-filter>
 """
         new_text = text.replace("        </activity>", inject + "        </activity>", 1)
         if new_text == text:
@@ -147,7 +173,7 @@ def patch_manifest() -> bool:
             return False
         text = new_text
         changed = True
-        print("manifest: added SEND intent filter")
+        print("manifest: added SEND + codehunt:// VIEW intent filters")
     else:
         print("manifest: SEND filter already present")
 

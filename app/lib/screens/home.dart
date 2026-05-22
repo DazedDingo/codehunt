@@ -21,6 +21,18 @@ class _HomeScreenState extends State<HomeScreen> {
   List<String> _history = [];
   List<String> _pinned = [];
   ConfidenceFilter _filter = ConfidenceFilter.medium;
+  bool _tapOpensSheet = true;
+
+  static ConfidenceFilter _parseFilter(String s) {
+    switch (s) {
+      case 'high':
+        return ConfidenceFilter.high;
+      case 'all':
+        return ConfidenceFilter.all;
+      default:
+        return ConfidenceFilter.medium;
+    }
+  }
 
   bool _passesFilter(CouponCode c) {
     switch (_filter) {
@@ -42,10 +54,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _bootstrap() async {
     final history = await Storage.history();
     final pinned = await Storage.pinned();
+    final filter = await Storage.getFilter();
+    final tapOpensSheet = await Storage.getTapOpensSheet();
     if (!mounted) return;
     setState(() {
       _history = history;
       _pinned = pinned;
+      _filter = _parseFilter(filter);
+      _tapOpensSheet = tapOpensSheet;
     });
 
     final initial = await ShareReceiver.getInitialShare();
@@ -103,7 +119,18 @@ class _HomeScreenState extends State<HomeScreen> {
         return cached;
       }
     }
-    final result = await hunt(target);
+    // Feed the user's didn't-work feedback back to the model so it skips
+    // codes they already rejected. Worked codes don't need this — they
+    // just sort to the top.
+    final feedback = await Storage.getFeedbackForDomain(
+      domain.isNotEmpty ? domain : target,
+    );
+    final skipCodes = feedback.entries
+        .where((e) => e.value == Storage.feedbackDidntWork)
+        .map((e) => e.key)
+        .toList();
+
+    final result = await hunt(target, skipCodes: skipCodes);
     if (result.domain.isNotEmpty) {
       await Storage.cache(result.domain, result);
       await Storage.recordHunt(result.domain);
@@ -131,7 +158,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
-    // History may have been cleared from the About screen.
+    // History may have been cleared, or tap-behavior changed, on About.
+    final tap = await Storage.getTapOpensSheet();
+    if (!mounted) return;
+    setState(() => _tapOpensSheet = tap);
     _reloadHistory();
   }
 
@@ -242,6 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
           domain: domain,
           code: filtered[i],
           feedback: feedback[filtered[i].code],
+          tapOpensSheet: _tapOpensSheet,
           onFeedbackChanged: _onFeedbackChanged,
         ),
       );
@@ -363,7 +394,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ButtonSegment(value: ConfidenceFilter.all, label: Text('all')),
               ],
               selected: {_filter},
-              onSelectionChanged: (s) => setState(() => _filter = s.first),
+              onSelectionChanged: (s) {
+                setState(() => _filter = s.first);
+                Storage.setFilter(_filter.name);
+              },
               showSelectedIcon: false,
               style: const ButtonStyle(
                 visualDensity: VisualDensity.compact,
@@ -429,11 +463,13 @@ class _CodeTile extends StatelessWidget {
   final String domain;
   final CouponCode code;
   final String? feedback;
+  final bool tapOpensSheet;
   final VoidCallback onFeedbackChanged;
   const _CodeTile({
     required this.domain,
     required this.code,
     required this.feedback,
+    required this.tapOpensSheet,
     required this.onFeedbackChanged,
   });
 
@@ -464,8 +500,24 @@ class _CodeTile extends StatelessWidget {
     return null;
   }
 
-  void _copyAndOpenSheet(BuildContext context) {
+  void _onTap(BuildContext context) {
     Clipboard.setData(ClipboardData(text: code.code));
+    if (tapOpensSheet) {
+      _openSheet(context);
+    } else {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Copied "${code.code}"'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
+  }
+
+  void _openSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -499,7 +551,7 @@ class _CodeTile extends StatelessWidget {
     final didntWork = feedback == Storage.feedbackDidntWork;
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
-      onTap: () => _copyAndOpenSheet(context),
+      onTap: () => _onTap(context),
       leading: CircleAvatar(
         backgroundColor: c.withOpacity(0.15),
         child: Icon(
@@ -571,7 +623,13 @@ class _CodeTile extends StatelessWidget {
             ),
         ],
       ),
-      trailing: Icon(Icons.chevron_right, size: 22, color: scheme.onSurfaceVariant),
+      trailing: tapOpensSheet
+          ? Icon(Icons.chevron_right, size: 22, color: scheme.onSurfaceVariant)
+          : IconButton(
+              icon: Icon(Icons.info_outline, size: 20, color: scheme.onSurfaceVariant),
+              tooltip: 'Details',
+              onPressed: () => _openSheet(context),
+            ),
     );
   }
 }

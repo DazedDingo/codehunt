@@ -55,6 +55,41 @@ void main() {
     });
   });
 
+  group('Storage.preferences', () {
+    test('filter defaults to medium', () async {
+      expect(await Storage.getFilter(), 'medium');
+    });
+
+    test('filter round-trip', () async {
+      await Storage.setFilter('high');
+      expect(await Storage.getFilter(), 'high');
+      await Storage.setFilter('all');
+      expect(await Storage.getFilter(), 'all');
+    });
+
+    test('tapOpensSheet defaults to true', () async {
+      expect(await Storage.getTapOpensSheet(), isTrue);
+    });
+
+    test('tapOpensSheet round-trip', () async {
+      await Storage.setTapOpensSheet(false);
+      expect(await Storage.getTapOpensSheet(), isFalse);
+      await Storage.setTapOpensSheet(true);
+      expect(await Storage.getTapOpensSheet(), isTrue);
+    });
+
+    test('clearAll preserves preferences', () async {
+      await Storage.setFilter('high');
+      await Storage.setTapOpensSheet(false);
+      await Storage.recordHunt('one.com');
+      await Storage.clearAll();
+      // History/cache/feedback wiped, but settings survive.
+      expect(await Storage.history(), isEmpty);
+      expect(await Storage.getFilter(), 'high');
+      expect(await Storage.getTapOpensSheet(), isFalse);
+    });
+  });
+
   group('Storage.clearAll', () {
     test('wipes history, pins, cache, feedback', () async {
       await Storage.recordHunt('one.com');

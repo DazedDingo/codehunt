@@ -13,6 +13,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _version = '';
+  bool _tapOpensSheet = true;
+  bool _loadedPrefs = false;
 
   @override
   void initState() {
@@ -20,6 +22,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     PackageInfo.fromPlatform().then((info) {
       if (!mounted) return;
       setState(() => _version = '${info.version}+${info.buildNumber}');
+    });
+    Storage.getTapOpensSheet().then((value) {
+      if (!mounted) return;
+      setState(() {
+        _tapOpensSheet = value;
+        _loadedPrefs = true;
+      });
     });
   }
 
@@ -50,12 +59,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(
               'Coupon-code researcher',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
             ),
           ),
           const SizedBox(height: 32),
           const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text(
+              'Behavior',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
+          SwitchListTile(
+            title: const Text('Tap a code opens detail sheet'),
+            subtitle: const Text(
+              'Off: tap = copy only with snackbar, info icon opens the sheet',
+            ),
+            value: _loadedPrefs ? _tapOpensSheet : true,
+            onChanged: _loadedPrefs
+                ? (v) {
+                    setState(() => _tapOpensSheet = v);
+                    Storage.setTapOpensSheet(v);
+                  }
+                : null,
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text(
+              'About',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
           ListTile(
             title: const Text('Version'),
             subtitle: Text(_version.isEmpty ? '...' : _version),
@@ -87,8 +124,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Clear history & cache?'),
         content: const Text(
-          'Removes your recent-hunt list and clears cached results. '
-          'Your next hunt will hit Gemini fresh.',
+          'Removes your recent-hunt list, pins, feedback, and cached results. '
+          'Settings (like the tap behavior toggle) are preserved.',
         ),
         actions: [
           TextButton(
